@@ -1,0 +1,394 @@
+=Introducción
+
+==La alta disponibilidad, generalmente abreviada como "HA", es un término utilizado para describir sistemas y marcos de software que están diseñados para preservar la disponibilidad del servicio de aplicaciones incluso en caso de falla de un componente del sistema. El componente fallido puede ser software o hardware; el marco de HA intentará responder a la falla de manera que las aplicaciones que se ejecutan dentro del marco continúen funcionando correctamente.
+
+Si bien el número de escenarios discretos de falla que pueden catalogarse es potencialmente muy grande, generalmente caen dentro de una de un número muy pequeño de categorías:
+
+Fallo de la aplicación que proporciona el servicio
+Fallo de una dependencia de software sobre la que se basa la aplicación
+Fallo de una dependencia de hardware en la que se basa la aplicación
+Fallo de un servicio externo o componente de infraestructura sobre el que se basa la aplicación o el marco de apoyo
+Los sistemas HA protegen la disponibilidad de las aplicaciones al agrupar conjuntos de servidores y software en unidades cooperativas o clusters. Los clústeres de HA suelen ser grupos de dos o más servidores, cada uno con su propia plataforma operativa, que se comunican entre sí a través de una conexión de red. Los clústeres de HA a menudo tendrán un almacenamiento externo compartido de múltiples puertos, con cada servidor del clúster conectado a través de rutas de almacenamiento redundantes al hardware de almacenamiento.
+
+Un marco de software de clúster gestiona la comunicación entre los participantes del clúster (nodos). El marco comunicará el estado del hardware del sistema y los servicios de la aplicación entre los nodos del clúster y proporcionará los medios para gestionar servicios y nodos, así como para reaccionar ante los cambios en el entorno del clúster (por ejemplo, error del servidor).
+
+Los sistemas HA se caracterizan por tener redundancia en la configuración del hardware: dos o más servidores, cada uno con dos o más rutas IO de almacenamiento y, a menudo, dos o más interfaces de red configuradas mediante enlaces o agregación de enlaces. Los sistemas de almacenamiento a menudo tienen características de redundancia similares, como la protección de datos RAID.
+
+Las mediciones de disponibilidad normalmente se aplican a la disponibilidad de las aplicaciones que se ejecutan en el clúster HA, en lugar de la infraestructura de alojamiento. Por ejemplo, la pérdida de un servidor físico debido a un fallo de un componente provocaría una conmutación por error o una migración de los servicios que el servidor proporcionaba a otro nodo del clúster. En este escenario, la duración de la interrupción sería la medida del tiempo necesario para migrar las aplicaciones a otro nodo y restaurar las aplicaciones al estado en ejecución. El servicio puede considerarse degradado hasta que se repare y restaure el componente defectuoso, pero el marco HA ha evitado una interrupción continua.
+
+En los sistemas que ejecutan un sistema operativo basado en Linux, el marco de clústeres de HA más comúnmente utilizado comprende dos aplicaciones de software combinadas: marcapasos, para proporcionar administración de recursos, y Corosync, para proporcionar comunicaciones de clúster y administración de bajo nivel, como membresía y quórum . Pacemaker puede rastrear su génesis hasta el proyecto original HA de Linux, llamado Heartbeat, mientras que Corosync se deriva del proyecto OpenAIS.
+
+Pacemaker y Corosync son ampliamente compatibles en las principales distribuciones de Linux, incluidos Red Hat Enterprise Linux y SuSE Linux Enterprise Server. Red Hat Enterprise Linux versión 6 usó una solución de HA muy compleja que incorporaba varias otras herramientas, y aunque esto se ha simplificado desde el lanzamiento de RHEL 6.4, todavía hay algo de software heredado en el marco.
+
+Con el lanzamiento de RHEL 7, el marco de alta disponibilidad de Red Hat se ha racionalizado en torno a Pacemaker y Corosync v2, simplificando el entorno de software. Red Hat también ofrece una herramienta de línea de comando llamada PCS (Pacemaker y Corosync Shell) disponible tanto para RHEL versión 6 como para versión 7. PCS proporciona una interfaz de comando de administración de sistema consistente para el software de alta disponibilidad y abstrae la implementación de software subyacente.
+
+Nota: Lustre no necesita ser incorporado necesariamente en un marco de software de HA, como Pacemaker, pero al hacerlo, permite que la plataforma operativa tome decisiones sobre migración tras error / migración de servicios sin la intervención del operador. Los marcos de HA también ayudan con el mantenimiento general y la administración de los recursos de la aplicación.
+
+Configuración de HA Framework para un clúster de dos nodos
+Red Hat Enterprise Linux y CentOS
+Red Hat Enterprise Linux versión 6 tiene una historia compleja con respecto al desarrollo y suministro de software HA. Antes de la versión 6.4, el software de alta disponibilidad de Red Hat era complejo y difícil de instalar y mantener. Con el lanzamiento de RHEL 6.4 y en todas las actualizaciones posteriores de RHEL 6, esto se ha consolidado en torno a tres paquetes principales: Marcapasos, Corosync versión 1 y CMAN. La pila de software se simplificó aún más en RHEL 7 para solo Pacemaker y Corosync versión 2.
+
+Los clústeres Red Hat EL 6 HA utilizan Pacemaker para proporcionar administración de recursos de clúster (CRM), mientras que CMAN se utiliza para proporcionar servicios de membresía y quórum de clúster. Corosync proporciona comunicaciones pero no otros servicios. CMAN es exclusivo de Red Hat Enterprise Linux y forma parte de un marco anterior. En RHEL 7, CMAN ya no es necesario y su funcionalidad está totalmente adaptada por Corosync versión 2, pero para cualquier agrupación de HA que ejecute RHEL 6, Red Hat estipula el uso de CMAN en los clústeres de Marcapasos.
+
+La aplicación PCS (Pacemaker y Corosync Shell) también se introdujo en RHEL 6.4 y está disponible en las versiones actuales de RHEL 6 y 7. PCS simplifica la instalación y configuración de los clústeres de HA en Red Hat.
+
+Prerrequisitos de infraestructura de hardware y servidor
+Este artículo demostrará cómo configurar un bloque de construcción de alta disponibilidad de Lustre utilizando dos servidores y una matriz de almacenamiento externa dedicada que está conectada a ambos servidores. Los diseños de bloque de dos nodos para servidores de metadatos y servidores de almacenamiento de objetos proporcionan una base adecuada para el despliegue de un clúster de sistema de archivos paralelo Luster de alta disponibilidad listo para producción.
+---
+
+La Figura 1 muestra una impresión azul para bloques de construcción de servidores de Lustre de alta disponibilidad típicos, uno para los servicios de metadatos y administración, y uno para el almacenamiento de objetos.
+
+
+Figura 1. Building Blocks de alta disponibilidad del servidor Luster
+Cada servidor representado en la Figura 1 requiere tres interfaces de red:
+
+Una red de comunicación de clúster dedicada entre servidores emparejados, utilizada como anillo de comunicaciones Corosync. Esto puede ser una conexión cruzada / punto a punto, o puede hacerse a través de un interruptor.
+Una red de gestión o conexión de interfaz pública. Esto será utilizado por el clúster HA como un anillo de comunicaciones adicional para Corosync.
+Interfaz pública, utilizada para la conexión a la red de datos de alto rendimiento: esta es la red desde la cual normalmente se accederá a los servicios de Lustre mediante computadoras cliente
+Una variante de esta arquitectura, que no se trata específicamente en esta guía, tiene un único anillo de comunicaciones Corosync formado por dos interfaces de red que se configuran en un enlace en una red privada. El enlace se crea según el proceso documentado del sistema operativo y luego se agrega a la configuración de Corosync.
+
+Prerrequisitos del software
+RHEL / CentOS
+Además de los requisitos previos descritos anteriormente para Lustre, el sistema operativo requiere la instalación del paquete de software HA. También puede ser necesario habilitar repositorios opcionales. Para los sistemas RHEL, el subscription-managercomando se puede usar para habilitar las autorizaciones del software para los paquetes de software HA. Por ejemplo:
+
+repositorio de administrador de suscripción \
+  --enable rhel-ha-for-rhel-7-server-rpms \
+  --enable rhel-7-server-optional-rpms
+o:
+
+repositorio de administrador de suscripción \
+  --enable rhel-ha-for-rhel-6-server-rpms \
+  --enable rhel-6-server-optional-rpms
+Este paso no es obligatorio para CentOS. Consulte la documentación de la distribución del sistema operativo para obtener información más completa sobre cómo habilitar derechos de suscripción.
+
+Instale el software HA
+RHEL / CentOS
+Inicie sesión como superusuario ( root) en cada uno de los servidores en el clúster propuesto e instale el software de marco de HA:
+yum -y instalar las PC marcapasos corosync valla-agentes [cman]
+Nota: El cmanpaquete solo es necesario para los servidores RHEL / CentOS 6.
+
+En cada servidor, agregue una cuenta de usuario que se utilizará para la administración del clúster y establezca una contraseña para esa cuenta. La convención es crear una cuenta de usuario con el nombre hacluster. El haclusterusuario debería haberse instalado como parte de la instalación del paquete (la cuenta se crea durante la instalación del pacemaker-libspaquete). pcsutilizará esta cuenta para facilitar la administración del clúster: la  haclustercuenta se utiliza para autenticar la aplicación de línea de comandos pcs, con el pcsddaemon de configuración ejecutándose en cada nodo del clúster ( pcsdla pcsaplicación lo usa para administrar la distribución de comandos y sincronizar la configuración del clúster entre nodos).
+Lo siguiente se toma del pacemaker-libsscript postinstall del paquete y muestra el procedimiento básico para agregar la cuenta hacluster si aún no existe:
+
+getent group haclient> / dev / null || groupadd -r haclient -g 189
+getent passwd hacluster> / dev / null || useradd -r -g haclient -u 189 -s / sbin / nologin -c clúster de "clúster usuario"
+Establecer una contraseña para la haclustercuenta. Esto debe establecerse y no hay un valor predeterminado. Haga que la contraseña sea la misma en cada nodo del clúster:
+hacluster de passwd
+Modifique o deshabilite el software de firewall en cada servidor del clúster. Según Red Hat, los siguientes puertos deben estar habilitados:
+TCP: puertos 2224, 3121, 21064
+UDP: puertos 5405
+En RHEL 7, el software de firewall se puede configurar para permitir el tráfico de clúster de la siguiente manera:
+
+firewall-cmd --permanente --add-service = alta disponibilidad
+firewall-cmd --add-service = alta disponibilidad
+Verificar la configuración del firewall:
+
+firewall-cmd --list-service
+Lustre también requiere que el puerto 988esté abierto para las conexiones entrantes, y los puertos 1021 a 1023 para las conexiones salientes.
+Alternativamente, deshabilite el firewall por completo.
+Para RHEL 7:
+
+systemctl stop firewalld
+systemctl disable firewalld
+Y para RHEL 6:
+
+chkconfig iptables desactivado
+chkconfig ip6tables desactivado
+servicio de parada de iptables
+servicio parada ip6tables
+Nota: Cuando trabaje con nombres de host en Pacemaker y Corosync, siempre use el nombre de dominio completo para hacer referencia a los nodos del clúster.
+
+Configure el Marco Core HA - Instrucciones PCS
+Configurar el PCS Daemon
+Inicie el daemon de configuración de Pacemaker,,  pcsden todos los servidores:
+RHEL 7:
+systemctl start pcsd.service
+systemctl enable pcsd.service
+RHEL 6:
+inicio del servicio pcsd
+chkconfig pcsd en
+Verifique que el servicio se esté ejecutando:
+RHEL 7: systemctl status pcsd.service
+RHEL 6: service pcsd status
+El siguiente ejemplo se toma de un servidor que ejecuta RHEL 7:
+
+[root @ rh7z-mds1 ~] # systemctl start pcsd.service
+[root @ rh7z-mds1 ~] # systemctl status pcsd.service
+• pcsd.service: PCS GUI y la interfaz de configuración remota
+   Cargado: cargado (/usr/lib/systemd/system/pcsd.service; habilitado; proveedor preestablecido: deshabilitado)
+   Activo: activo (en ejecución) desde Wed 2016-04-13 01:30:52 EDT; 1min 11s ago
+ PID principal: 29343 (pcsd)
+   CGroup: /system.slice/pcsd.service
+           ├─29343 / bin / sh / usr / lib / pcsd / pcsd start
+           ├─29347 / bin / bash -c ulimit -S -c 0> / dev / null 2> & 1; / usr / bin / ruby ​​-I / usr / lib / pcsd / u ...
+           └─29348 / usr / bin / ruby ​​-I / usr / lib / pcsd /usr/lib/pcsd/ssl.rb
+
+13 de abril 01:30:50 rh7z-mds1 systemd [1]: iniciando la GUI de PCS y la interfaz de configuración remota ...
+13 de abril 01:30:52 rh7z-mds1 systemd [1]: Interfaz de usuario de PCS iniciada e interfaz de configuración remota.
+Configure la autenticación PCS ejecutando el siguiente comando en solo uno de los nodos del clúster:
+cluster clc auth <nodo 1> <nodo 2> [...] -u hacluster
+Por ejemplo:
+
+[root @ rh7z-mds1 ~] # clúster de PC auth \
+> rh7z-mds1.lfs.intl rh7z-mds2.lfs.intl \
+> -u hacluster
+Contraseña: 
+rh7z-mds2.lfs.intl: Autorizado
+rh7z-mds1.lfs.intl: Autorizado
+Crear el marco del clúster
+La pcssintaxis del comando es completa, pero no toda la funcionalidad está disponible para los clústeres RHEL 6. Por ejemplo, la sintaxis para configurar el protocolo de anillo redundante (RRP) para comunicaciones Corosync se ha agregado recientemente a RHEL 6.
+
+A menos que se indique lo contrario, los comandos de esta sección se ejecutan solo en un nodo del clúster.
+
+La sintaxis de la línea de comando es:
+
+configuración del clúster de PC [--start] --name <nombre del clúster> \
+  <especificación de nodo 1> [<especificación de nodo 2>] \
+  [--transport {udpu | udp}] \
+  [--rrpmode {activo | pasivo}] \
+  [--addr0 <dirección>] \
+  [--addr1 <dirección>] \
+  [--mcast0 <dirección>] [--mcastport0 <puerto>] \
+  [--mcast1 <dirección>] [--mcastport1 <puerto>] \
+  [--token <timeout>] [--join <timeout>] \
+  [...]
+La especificación del nodo es una lista separada por comas de nombres de host o direcciones IP para las interfaces de host que se usarán para las comunicaciones de Corosync. El nombre del clúster es una cadena arbitraria y tendrá el valor predeterminado  pcmksi se omite la opción.
+
+Es posible crear una configuración de clúster que comprenda un solo nodo. Se pueden agregar nodos adicionales a la configuración del clúster en cualquier momento después de que se haya creado el clúster inicial. Esto puede ser particularmente útil cuando se lleva a cabo una actualización importante del sistema operativo o la migración del servidor, donde se deben encargar nuevos servidores y es necesario minimizar la duración de las interrupciones.
+
+Por ejemplo, la actualización de RHEL 6 a RHEL 7 generalmente requiere la instalación del nuevo sistema operativo a partir de una línea de base limpia: no existe una ruta de actualización "in situ". Una forma de evitar esta limitación es actualizar los nodos de uno en uno, creando un nuevo marco en el primer nodo actualizado, deteniendo los recursos en el clúster anterior y recreándolos en el nuevo clúster, y luego reconstruyendo el segundo nodo (y posiblemente cualquier nodo adicional).
+
+El requisito mínimo para las comunicaciones de red del clúster es una única interfaz en la configuración del clúster, pero se pueden agregar más interfaces para aumentar la solidez de la mensajería entre nodos del clúster HA. Las comunicaciones se organizan en anillos, y cada anillo representa una red separada. Corosync puede admitir múltiples timbres usando una característica llamada Redundant Ring Protocol (RRP).
+
+Hay dos tipos de transporte admitidos por el comando PCS: udpu(unicast UDP) y udp(utilizado para multicast). Se udprecomienda el transporte, ya que es más eficiente. udpu, que es el valor predeterminado si no se especifica transporte †, solo se debe seleccionar para las circunstancias donde no se puede usar la multidifusión.
+
+† Nota: El transporte predeterminado puede variar, dependiendo de las herramientas utilizadas para crear la configuración del clúster. De acuerdo con la corosync.conf(5)página man, el transporte predeterminado es udp. Sin embargo, la pcs(8)página man indica que el transporte predeterminado para RHEL 7 es udpuy el predeterminado para RHEL 6 es udp.
+
+Al usar udpu(unidifusión), los anillos de comunicación Corosync están determinados por la especificación del nodo, que es una lista separada por comas de nombres de host o direcciones IP asociadas con las interfaces en anillo. Por ejemplo:
+
+configuración del clúster de PC - nombre demo node1-A, node1-B node2-A, node2-B
+Cuando udpse elige el transporte (multidifusión), los anillos de comunicaciones se definen enumerando las redes sobre las que se transportará el tráfico de multidifusión Corosync, junto con una lista opcional de las direcciones y puertos de multidifusión que se utilizarán. Los anillos se especifican utilizando los indicadores --addr0y --addr1, por ejemplo:
+
+configuración del clúster de PC - nombre demo node1-A node2-A \
+  --transporte udp \
+  --addr0 10.70.0.0 --addr1 192.168.227.0
+Use las direcciones de red en lugar de las direcciones IP del host para definir las udpinterfaces, ya que esto permitirá que se use una configuración de Corosync común en todos los nodos del clúster. Si se utilizan direcciones IP del host, se requerirá una configuración manual adicional de Corosync en los nodos del clúster. El uso de direcciones de red simplificará la configuración y el mantenimiento.
+
+Nota: Corosync no puede analizar direcciones de red suministrados en el CIDR (Classless Inter-Domain Routing) notación, por ejemplo, 10.70/16. Siempre utilice la notación de punto completo para la especificación de las redes, por ejemplo, 10.70.0.0o 192.168.227.0.
+
+Las direcciones de multidifusión son predeterminadas 239.255.1.1para ring0y 255.239.2.1para ring1. El puerto de multidifusión predeterminado es 5405para ambos anillos de multidifusión.
+
+Corosync en realidad usa dos puertos de multidifusión para la comunicación en cada anillo. Los puertos se asignan en pares de recepción / envío, pero solo se especifica el número de puerto de recepción al configurar el clúster. El puerto de envío es uno menos que el número de puerto de recepción (es decir send port = mcastport - 1). Asegúrese de que haya un espacio de al menos 1 entre los puertos asignados para una dirección de multidifusión dada en una subred. Además, si hay varios clústeres de HA con anillos Corosync en la misma subred, cada clúster requerirá un par de puertos de multidifusión único (diferentes clústeres pueden usar la misma dirección de multidifusión, pero no los mismos puertos de multidifusión).
+
+Por ejemplo, si hay seis OSS configurados en tres pares de HA y un par de MDS, cada par de servidores requerirá un puerto de multidifusión único para cada anillo, y debe haber un espacio de al menos uno entre los números de puerto. Por lo tanto, una serie de 49152, 49154, 49156, 49158podría ser adecuado. Una gama de 49152, 49153, 49154, 49155no es válida porque no hay huecos entre los números para acomodar el puerto de envío.
+
+El modo de protocolo de anillo redundante (RRP) es especificado por la --rrpmodebandera. Las opciones válidas son: none, activey passive. Si solo se define una interfaz, entonces nonese selecciona automáticamente. Si se definen múltiples anillos, debe active o passivedebe usarse.
+
+Cuando se establece en active, Corosync enviará todos los mensajes a todas las interfaces simultáneamente. El rendimiento no es tan rápido, pero se mejora la latencia general, especialmente cuando se comunica a través de redes defectuosas o no confiables.
+
+La passiveconfiguración le dice a Corosync que use una interfaz, con las interfaces restantes disponibles en modo de espera. Si la interfaz falla, se usará una de las interfaces en espera. Este es también el modo predeterminado al crear una configuración RRP con pcs.
+
+En teoría, el activemodo proporciona una mejor confiabilidad a través de múltiples interfaces, mientras que el passivemodo puede ser preferido cuando la tasa de mensajes es más importante. Sin embargo, la página del manual pcshace que la elección sea clara y directa: solo el passivemodo es compatible pcsy es el único modo que recibe la prueba.
+
+La --tokenbandera especifica el tiempo de espera en milisegundos después de lo cual se declara la pérdida de un token. El valor predeterminado es 1000 (1000 ms o 1 segundo). El valor representa el tiempo total antes de que un token sea declarado perdido. Cualquier retransmisión ocurre dentro de esta ventana.
+
+En un clúster de servidores Lustre, el tokentiempo de espera predeterminado es generalmente demasiado corto para acomodar la variación en la respuesta cuando los servidores están bajo mucha carga. Un servidor sano que está ocupado puede tardar más en pasar el token al siguiente servidor en el anillo en comparación con cuando el servidor está inactivo; si el tiempo de espera es demasiado corto, el clúster podría declarar la pérdida del token. Si hay demasiados tokens perdidos de un nodo, el marco del cluster considerará que el nodo está muerto.
+
+Se recomienda que el valor del tokenparámetro aumente significativamente desde el valor predeterminado. 20000ms es un valor razonable y conservador, pero los usuarios querrán experimentar para encontrar la configuración óptima. Si el clúster parece conmutar por error con demasiada frecuencia bajo carga, pero sin ningún otro síntoma, el valor debe aumentarse como un primer paso para ver si alivia el problema.
+
+Ejemplos de configuración de PCS
+El siguiente ejemplo usa la invocación más simple para crear una configuración de marco de clúster que comprende dos nodos. Este ejemplo no especifica un transporte, por udpulo que PCS elegirá el valor predeterminado para comunicaciones de clúster en RHEL 7, y udpse seleccionará para RHEL 6:
+
+configuración del clúster de PC - nombre demo - MDS \
+  rh7z-mds1.lfs.intl rh7z-mds2.lfs.intl
+El siguiente ejemplo se usa nuevamente, udpupero incorpora un segundo anillo redundante para comunicaciones de clúster:
+
+configuración del clúster de PC - nombre demo-MDS-1-2 \
+  rh7z-mds1.lfs.intl, 192.168.227.11 \
+  rh7z-mds2.lfs.intl, 192.168.227.12
+La especificación de nombre de host está separada por comas, y las interfaces de nodo se especifican en orden de prioridad de anillo. La primera interfaz en la lista se unirá ring0, la segunda interfaz se unirá ring1. En el ejemplo anterior, las ring0interfaces corresponden al nombre rh7z-mds1.lfs.intlde host para el primer nodo y rh7z-mds2.lfs.intlpara el segundo nodo. Las ring1interfaces son 192.168.227.11y 192.168.227.12para el nodo 1 y el nodo 2 respectivamente. También se podrían agregar las direcciones IP para ring1 en la tabla de hosts o DNS si hay una preferencia para referirse a las interfaces por nombre en lugar de por dirección.
+
+El siguiente ejemplo demuestra la sintaxis para crear un clúster de dos nodos con dos anillos de comunicaciones Corosync que usan udpmultidifusión:
+
+configuración del clúster de PC - nombre demo-MDS-1-2 \
+  rh7z-mds1.lfs.intl rh7z-mds2.lfs.intl \
+  --transporte udp \
+  --rrpmode pasivo \
+  --token 20000 \
+  --addr0 10.70.0.0 \
+  --addr1 192.168.227.0 \
+  --mcast0 239.255.1.1 --mcastport0 49152 \
+  --mcast1 239.255.2.1 --mcastport1 49152
+Este ejemplo utiliza la sintaxis y la configuración preferidas para un clúster HA de dos nodos. Los nombres, direcciones IP, etc. serán diferentes para cada instalación individual, pero la estructura es consistente y es una buena plantilla para copiar.
+
+Nota: El ejemplo anterior creará resultados diferentes cuando se ejecuta en RHEL 6 versus RHEL 7. Esto se debe a que RHEL 6 usa un paquete adicional llamado CMAN, que asume algunas de las responsabilidades que en RHEL 7 son administradas completamente por Corosync. Debido a esta diferencia, los clústeres RHEL 6 pueden comportarse de forma un poco diferente a los clústeres RHEL 7, aunque los comandos utilizados para configurar cada uno podrían ser idénticos.
+
+Nota: Si hay efectos secundarios inesperados o inexplicables cuando se ejecuta con RHEL 6 clusters, intente simplificar la configuración. Por ejemplo, intente cambiar el transporte de la udpmultidifusión a la udpuconfiguración de unidifusión más simple , y use la sintaxis separada por comas para definir las direcciones de nodo para RRP, en lugar de usar las --addr[0,1]banderas.
+
+Cambiar la clave de seguridad predeterminada
+Cambiar la clave predeterminada utilizada por Corosync para las comunicaciones es opcional, pero mejorará la seguridad general de la instalación del clúster. Las diferentes distribuciones y versiones del sistema operativo tienen diferentes procedimientos para administrar la clave de autenticación del marco del clúster, por lo que la siguiente información se proporciona solo con fines informativos. Consulte la documentación del proveedor del sistema operativo para obtener instrucciones actualizadas.
+
+La clave predeterminada se puede cambiar ejecutando el comando corosync-keygen. La clave se escribirá en el archivo /etc/corosync/authkey. Ejecute el comando en un único host en el clúster y luego copie la clave resultante en cada nodo. El archivo debe ser propiedad del usuario raíz y debe tener permisos de solo lectura. Ejemplo de salida a continuación:
+
+[root @ rh7z-mds1 ~] # corosync-keygen 
+Corosync Cluster Engine Autenticación clave generador.
+Recopilando 1024 bits para la clave de / dev / random.
+Presiona las teclas en tu teclado para generar entropía.
+Escribir la clave corosync en / etc / corosync / authkey.
+[root @ rh7z-mds1 ~] # ll / etc / corosync / authkey 
+-r -------- 1 root root 128 abr 13 23:48 / etc / corosync / authkey
+Nota: Si la clave no es la misma para cada nodo del clúster, entonces no podrán comunicarse entre sí para formar un clúster. Para los hosts que ejecutan Corosync versión 2, crear la clave y copiar en todos los nodos debería ser suficiente. Para los hosts que ejecutan RHEL 6 con el software CMAN, el marco del clúster también debe conocer la nueva clave:
+
+ccs -f /etc/cluster/cluster.conf \
+  --setcman keyfile = "/ etc / corosync / authkey"
+Inicio y detención del marco del clúster
+Para iniciar el marco del clúster, emita el siguiente comando desde uno de los nodos del clúster:
+
+inicio del clúster de PC [<nodo> [<nodo> ...] | --todas ]
+Para iniciar el marco del clúster solo en el nodo actual, ejecute el comando de inicio del clúster de PC sin ninguna opción adicional. Para iniciar el clúster en todos los nodos, proporcione el --allmarcador y, para limitar el inicio a un conjunto específico de nodos, enumérelos individualmente en la línea de comando.
+
+Para cerrar una parte o la totalidad del marco del clúster, ejecute el pcs stopcomando:
+
+pcs cluster stop [<nodo> [<nodo> ...] | --todas ]
+Los parámetros para el pcs stopcomando son los mismos que los parámetros para pcs start.
+
+No configure el software del clúster para que se ejecute automáticamente al arrancar el sistema. Si se produce un error durante la operación del clúster y un nodo se aísla y se apaga o reinicia como consecuencia, es imperativo que el nodo sea reparado, revisado y restaurado a un estado saludable antes de volver a comprometerlo con el marco del clúster. Hasta que se haya aislado y corregido la causa raíz del error, volver a agregar un nodo al marco puede ser peligroso y poner en peligro los servicios y los datos.
+
+Por este motivo, asegúrese de que el pacemakery los corosyncservicios están deshabilitados en las secuencias de inicio sysvinit o systemd:
+
+RHEL 7:
+
+systemctl disable corosync.service
+systemctl disable pacemaker.service
+RHEL 6:
+
+chkconfig cman apagado 
+chkconfig corosync apagado
+chkconfig marcapasos fuera
+Sin embargo, es seguro mantener pcsdhabilitado el daemon de ayuda de PCS .
+
+Establecer propiedades globales del clúster
+Cuando se haya creado el marco del clúster y se esté ejecutando en al menos uno de los nodos, establezca los siguientes valores predeterminados globales para propiedades y recursos.
+
+no_quorum_policy
+La no_quorum_policypropiedad define cómo se comportará el clúster cuando hay una pérdida de quórum. Para clústeres de HA de dos nodos, esta propiedad debe establecerse en ignore, lo que le indica al clúster que continúe ejecutándose. Cuando hay más de dos nodos, establezca el valor de la propiedad stop.
+
+### Para clúster de 2 nodos:
+### no_quorum_policy = ignorar
+### Para> clúster de 2 nodos:
+### no_quorum_policy = stop
+propiedad de las PC establecida no-quorum-policy = ignorar
+stonith-enabled
+La stonith-enabledpropiedad le dice al clúster si hay agentes de vallado configurados en el clúster. Si se establece en true(muy recomendable y esencial para cualquier implementación de producción), el clúster intentará cercar los nodos que están ejecutando recursos que no se pueden detener. El clúster también se negará a iniciar cualquier recurso a menos que haya al menos un recurso STONITH configurado.
+
+La propiedad solo debe establecerse falsecuando el clúster se use con fines de demostración.
+
+### values: true (predeterminado) o falso
+propiedad de la PC establecida stonith-enabled = true
+symmetric-cluster
+Cuando symmetric-clusterse establece igual a true, esto indica que todos los nodos en el clúster tienen configuraciones equivalentes y son igualmente capaces de ejecutar cualquiera de los recursos definidos. Para un clúster simple de dos nodos con almacenamiento compartido, como se usa comúnmente para los servicios de Lustre, symmetric-clustercasi siempre se debe establecer en true.
+
+### values: true (predeterminado) o falso
+conjunto de propiedades de pc symmetric-cluster = true
+resource-stickiness
+resource-stickinesses una propiedad de recursos que define cuánto prefiere un recurso permanecer en el nodo donde se está ejecutando actualmente. Cuanto mayor sea el valor, más pegajoso será el recurso y menos probable será que migre automáticamente a su ubicación preferida si se ejecuta en un nodo no preferido / no predeterminado en el clúster y el recurso está en buen estado. resource-stickinessafecta el comportamiento de auto-failback.
+
+Si un recurso se está ejecutando en un nodo no preferido y el recurso está en buen estado, no se migrará automáticamente a su nodo preferido. Si la rigidez es más alta que la puntuación de preferencia de un recurso, el recurso no se moverá automáticamente mientras la máquina en la que se encuentra se mantenga saludable.
+
+El valor predeterminado es 0 (cero). Es común establecer el valor superior a 100 como un indicador de que el recurso no debe interrumpirse migrándolo automáticamente si el recurso y el nodo en el que se ejecuta son saludables.
+
+recursos por defecto de los recursos de las computadoras = 200
+Verificar la configuración y el estado del clúster
+Para ver el estado general del clúster:
+
+estado de las PC [<opciones> | --ayuda]
+Por ejemplo:
+
+[root @ rh7z-mds1 ~] # estado de las PC
+Nombre del clúster: demo-MDS-1-2
+ADVERTENCIA: ningún dispositivo stonith y stonith-enabled no son falsos
+Última actualización: jue 14 abr. 00:58:29 2016 últimos cambios: mié 13 abr 21:16:13 2016 por hacluster via crmd en rh7z-mds1.lfs.intl
+Pila: corosync
+DC actual: rh7z-mds1.lfs.intl (versión 1.1.13-10.el7_2.2-44eb2dd) - partición con quórum
+2 nodos y 0 recursos configurados
+
+En línea: [rh7z-mds1.lfs.intl rh7z-mds2.lfs.intl]
+
+Lista completa de recursos:
+
+
+Estado de PCSD:
+  rh7z-mds1.lfs.intl: en línea
+  rh7z-mds2.lfs.intl: en línea
+
+Daemon Status:
+  corosync: activo / deshabilitado
+  marcapasos: activo / deshabilitado
+  pcsd: activo / habilitado
+</ code>
+
+Para revisar la configuración del clúster:
+
+<pre style = "overflow-x: auto;">
+PC cib cluster
+La salida estará en el formato XML CIB.
+
+La configuración de tiempo de ejecución de Corosync también se puede revisar:
+
+RHEL 7 / Corosync v2: corosync-cmapctl
+RHEL 6 / Corosync v1: corosync-objctl
+Esto puede ser muy útil cuando se verifican cambios específicos en la configuración de comunicaciones del clúster, como la configuración de RRP. Por ejemplo:
+
+[root @ rh7z-mds1 ~] # corosync-cmapctl | interfaz grep
+totem.interface.0.bindnetaddr (str) = 10.70.0.0
+totem.interface.0.mcastaddr (str) = 239.255.1.1
+totem.interface.0.mcastport (u16) = 49152
+totem.interface.1.bindnetaddr (str) = 192.168.227.0
+totem.interface.1.mcastaddr (str) = 239.255.2.1
+totem.interface.1.mcastport (u16) = 49152
+</ code>
+
+Para verificar el estado de los anillos Corosync:
+
+<pre style = "overflow-x: auto;">
+[root @ rh7z-mds1 ~] # corosync-cfgtool -s
+Estado del anillo de impresión.
+ID de nodo local 1
+RING ID 0
+	id = 10.70.227.11
+	estado = anillo 0 activo sin fallas
+RING ID 1
+	id = 192.168.227.11
+	estado = anillo 1 activo sin fallas
+Para obtener el estado del clúster de CMAN en RHEL 6 clusters:
+
+[root @ rh6-mds1 ~] # cman_tool status
+Versión: 6.2.0
+Versión de configuración: 14
+Nombre del clúster: demo-MDS-1-2
+Número de clúster: 28594
+Miembro del grupo: sí
+Generación de grupos: 24
+Estado de membresía: Cluster-Member
+Nodos: 2
+Votos previstos: 1
+Votos totales: 2
+Nodos de votos: 1
+Quórum: 1  
+Subsistemas activos: 9
+Banderas: 2node 
+Puertos Encuadernados: 0  
+Nombre del nodo: rh6-mds1.lfs.intl
+ID de nodo: 1
+Direcciones de multidifusión: 239.255.1.1 239.255.2.1 
+Direcciones de nodo: 10.70.206.11 192.168.206.11 
+Si el clúster parece iniciarse, pero hay errores informados por pcs cluster statusy en el registro del sistema relacionados con el tótem Corosync, puede haber un conflicto en la configuración de la dirección de multidifusión con otro clúster o servicio en la misma subred. Un error típico en el registro del sistema sería similar al siguiente resultado:
+
+13 de abril 22:11:15 rh67-pe corosync [26370]: [TOTEM] El mensaje recibido tiene un resumen no válido ... ignorando.
+13 de abril 22:11:15 rh67-pe corosync [26370]: [TOTEM] Datos de paquetes inválidos
+Estos errores indican que el nodo ha interceptado el tráfico destinado a un nodo en un clúster diferente.
+
+También tenga cuidado en la definición de la red y las direcciones de multidifusión. pcsa menudo creará la configuración sin quejarse, y el marco del clúster puede incluso cargar sin informar ningún error al shell del comando. Sin embargo, una configuración incorrecta puede llevar a una falla en el RRP que no sea inmediatamente obvia. Busque información inesperada en la base de datos Corosync y en el cluster CIB.
+
+Por ejemplo, si una de las direcciones de los nodos del clúster aparece como localhosto 127.0.0.1, esto indica un problema con las direcciones proporcionadas pcscon los indicadores --addr0o --addr1.
+
