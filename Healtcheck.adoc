@@ -1,6 +1,6 @@
-=Introducción
+= Introducción
 
-==La alta disponibilidad, generalmente abreviada como "HA", es un término utilizado para describir sistemas y marcos de software que están diseñados para preservar la disponibilidad del servicio de aplicaciones incluso en caso de falla de un componente del sistema. El componente fallido puede ser software o hardware; el marco de HA intentará responder a la falla de manera que las aplicaciones que se ejecutan dentro del marco continúen funcionando correctamente.
+== La alta disponibilidad, generalmente abreviada como "HA", es un término utilizado para describir sistemas y marcos de software que están diseñados para preservar la disponibilidad del servicio de aplicaciones incluso en caso de falla de un componente del sistema. El componente fallido puede ser software o hardware; el marco de HA intentará responder a la falla de manera que las aplicaciones que se ejecutan dentro del marco continúen funcionando correctamente.
 
 Si bien el número de escenarios discretos de falla que pueden catalogarse es potencialmente muy grande, generalmente caen dentro de una de un número muy pequeño de categorías:
 
